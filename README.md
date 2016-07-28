@@ -16,7 +16,7 @@ different end uses.
 
 Install the developmental version from GitHub via the `devtools` package:
 ```
-devtools::install_github("neyhartj/NAME")
+devtools::install_github("neyhartj/barleypheno")
 ```
 
 ## Examples
