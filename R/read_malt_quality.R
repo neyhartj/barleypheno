@@ -23,6 +23,7 @@
 #' @import dplyr
 #' @import stringr
 #' @importFrom readxl read_excel
+#' @importFrom purrr map
 #'
 #' @export
 #'
@@ -43,7 +44,7 @@ read_maltq <- function(files, tidy = FALSE) {
     data.f <- read_excel(path = f, col_names = FALSE) %>%
       # Remove columns that are all NA
       select(which(colMeans(is.na(.)) != 1))
-    
+
     # Record the table number
     table.no <- data.f[2,1] %>%
       as.character()
@@ -63,7 +64,7 @@ read_maltq <- function(files, tidy = FALSE) {
 
     # Replace the names in the dataset
     data.f2 <- slice(data.f1, -c(1:3))
-    colnames(data.f2) <- var.names
+    names(data.f2) <- make.names(var.names)
 
     # Find the next row with the table name
     table.row <- which(data.f2$LabNo. == table.no)
@@ -81,59 +82,65 @@ read_maltq <- function(files, tidy = FALSE) {
 
     # Iterate over the variable names except for LabNo. and VarietyorSelection,
     ## extract numeric values, and replace those values in the data.frame
-    for (varname in var.names[!var.names %in% c("LabNo.", "VarietyorSelection")]) {
-      suppressWarnings(data.f3[[varname]] <- parse_numeric(data.f3[[varname]]))
-    }
-
-
-    # Add a new column with the table number
-    data.f3 <- mutate(data.f3, Batch = table.no)
+    data.f4 <- suppressWarnings({ data.f3 %>%
+      mutate_at(vars(-LabNo., -VarietyorSelection), .funs = parse_number) }) %>%
+      # Remove rows with all NA
+      slice(which(rowMeans(is.na(.)) != 1)) %>%
+      # Add a new column with the table number
+      mutate(Batch = table.no)
 
 
     # Cut out the checks
-    check.slice <- data.f3$VarietyorSelection %>%
-      str_detect(pattern = "MALT CHECK") %>%
-      which()
-    check.f <- slice(data.f3, check.slice)
+    data.check <- data.f4 %>%
+      filter(str_detect(VarietyorSelection, "MALT CHECK"))
+
     # Cut out the stats
-    stats.slice <- grep(pattern = "^[^0-9]{1,}", x = data.f3$LabNo.)
-    stats.f <- slice(data.f3, stats.slice)
+    data.stats <- data.f4 %>%
+      filter(str_detect(LabNo., "^[^0-9]{1,}"))
+
     # Create a final data.frame
-    data.f4 <- data.f3 %>%
-      slice(-c(check.slice, stats.slice)) %>%
-      # Sort on entry name
-      arrange(VarietyorSelection)
+    data.f5 <- dplyr::setdiff(data.f4, bind_rows(data.stats, data.check))
 
     # Add to the list
-    maltq.compiled[[table.no]] <- list(data = data.f4, checks = check.f, stats = stats.f)
+    maltq.compiled[[table.no]] <- list(data = data.f5, checks = data.check, stats = data.stats)
   }
 
-  # Combine each set of data.frame
-  maltq.data <- bind_rows(lapply(X = maltq.compiled, FUN = function(batch) batch$data)) %>%
+  # Combine each set of data.frames
+  maltq.data <- maltq.compiled %>%
+    map(function(table_list) table_list$data) %>%
+    bind_rows() %>%
     arrange(VarietyorSelection)
-  maltq.stats <- bind_rows(lapply(X = maltq.compiled, FUN = function(batch) batch$stats))
-  maltq.checks <- bind_rows(lapply(X = maltq.compiled, FUN = function(batch) batch$checks))
 
+  maltq.stats <- maltq.compiled %>%
+    map(function(table_list) table_list$stats) %>%
+    bind_rows()
+
+  maltq.checks <- maltq.compiled %>%
+    map(function(table_list) table_list$checks) %>%
+    bind_rows()
+
+
+  # The names of the data.frames
+  df_names <- c("maltq.data", "maltq.stats", "maltq.checks")
+
+  # Iterate over names and gather the df
+  df_list <- list(maltq.data, maltq.stats, maltq.checks)
+
+  names(df_list) <- df_names
 
   # Rearrange if requested
   if (tidy) {
-    maltq.data.gather <- maltq.data %>%
-      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch, -LabNo.)
-    maltq.stats.gather <- maltq.data %>%
-      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch, -LabNo.)
-    maltq.checks.gather <- maltq.data %>%
-      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch, -LabNo.)
+
+    df_list <- df_list %>%
+      map(gather, key = "Parameter", value = "value", -VarietyorSelection, -Batch, -LabNo.)
 
     # Output list
-    return(list(data = as.data.frame(maltq.data.gather),
-                stats = as.data.frame(maltq.stats.gather),
-                checks = as.data.frame(maltq.checks.gather)))
+    return(df_list)
 
   } else { # Otherwise just output a list
 
-    return(list(data = as.data.frame(maltq.data),
-                stats = as.data.frame(maltq.stats),
-                checks = as.data.frame(maltq.checks)))
+    # Output list
+    return(df_list)
 
   }
 

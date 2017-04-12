@@ -4,7 +4,7 @@
 \alias{maltq_to_fb}
 \title{Convert a malt quality dataset to Field Book}
 \usage{
-maltq_to_fb(maltq.df, lab.to.plot, field.book)
+maltq_to_fb(maltq.df, lab.to.plot, fbt)
 }
 \arguments{
 \item{maltq.df}{A \code{data.frame} of raw malting quality data compiled
@@ -17,11 +17,11 @@ be the malt quality traits.}
 corresponding plot number of the trial from which grain was sampled for malting
 analysis.}
 
-\item{field.book}{A \code{data.frame} of the blank field.book table listing plot_id,
+\item{fbt}{A \code{data.frame} of the blank fbt table listing unique_id,
 plot, trial, line_name, row, column, entry, rep, and notes.}
 }
 \value{
-A modified field.book \code{data.frame} with the raw data from malting
+A modified fbt \code{data.frame} with the raw data from malting
 quality.
 }
 \description{
