@@ -5,6 +5,10 @@ Authors@R: person("Jeff", "Neyhart", email = "neyhartje@gmail.com", role = c("au
 Description: Provides functions for processing and manipulating raw phenotype data typically generated in the University of Minnesota Barley Breeding Group. Functions allow for a reproducible pipeline for different end goals, including genomic prediction, spatial adjustment, or database upload (T3).
 Depends:
     R (>= 3.3.1)
+Imports:
+    readxl,
+    dplyr,
+    tidyr
 License: MIT
 Encoding: UTF-8
 LazyData: true

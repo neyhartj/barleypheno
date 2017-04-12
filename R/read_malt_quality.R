@@ -19,17 +19,18 @@
 #'
 #' $checks A \code{data.frame} of malting quality values for the laboratory checks
 #'
-#' @import tidyr
+#' @import readr
 #' @import dplyr
+#' @import stringr
 #' @importFrom readxl read_excel
 #'
 #' @export
 #'
-extract.maltq <- function(files, tidy = FALSE) {
+read_maltq <- function(files, tidy = FALSE) {
 
   ## Error reporting
   # Make sure the files are Excel files
-  if ( !any(grepl(pattern = paste0(c(".xls$", ".xlsx$"), collapse = "|"), files)) )
+  if ( !all(endsWith(x = files, suffix = c(".xlsx")) | endsWith(x = files, suffix = c(".xls"))) )
     stop("The filenames in 'files' do not have the extension '.xls' or '.xlsx'.")
 
   # Blank output list
@@ -39,22 +40,25 @@ extract.maltq <- function(files, tidy = FALSE) {
   for (f in files) {
 
     # Read in the file
-    data.f <- read_excel(path = f, col_names = FALSE)
-
+    data.f <- read_excel(path = f, col_names = FALSE) %>%
+      # Remove columns that are all NA
+      select(which(colMeans(is.na(.)) != 1))
+    
     # Record the table number
-    table.no <- as.character(data.f[2,1])
+    table.no <- data.f[2,1] %>%
+      as.character()
 
     # Remove the first two rows
-    data.f1 <- slice(data.f, -c(1:2))
+    data.f1 <- data.f %>%
+      slice(-c(1:2))
 
     # Subset the next 3 rows (these are the variable identifiers)
     var.names <- slice(data.f1, 1:3) %>%
       # Collapse into a single string
       apply(X = ., MARGIN = 2, FUN = function(var) paste0(na.omit(var), collapse = "")) %>%
       # Remove spaces
-      gsub(pattern = " ", replacement = "", x = .) %>%
-      # Remove other annoying characters
-      gsub(pattern = "\"", replacement = "", x = .) %>%
+      str_replace_all(pattern = " ", replacement = "") %>%
+      str_replace_all(pattern = "\"", replacement = "") %>%
       as.character()
 
     # Replace the names in the dataset
@@ -62,11 +66,12 @@ extract.maltq <- function(files, tidy = FALSE) {
     colnames(data.f2) <- var.names
 
     # Find the next row with the table name
-    table.row <- which(select(data.f2, LabNo.) == table.no)
+    table.row <- which(data.f2$LabNo. == table.no)
     # If that table name does not occur again, skip
     if (length(table.row) != 0) {
       # Remove that row and the next 3 rows
-      data.f2 <- slice(data.f2, -seq(table.row, table.row + 3))
+      to.remove <- as.numeric(sapply(X = table.row, FUN = function(row) seq(row, row + 3)))
+      data.f2 <- slice(data.f2, -to.remove)
     }
 
     # Find the row with "Coefficients of Variation"
@@ -74,24 +79,21 @@ extract.maltq <- function(files, tidy = FALSE) {
     # Remove all data after this row
     data.f3 <- slice(data.f2, -((coef.row + 1):nrow(data.f2)))
 
-    # Remove rows with all NA
-    data.f3 <- filter(data.f3, !apply(X = data.f3, MARGIN = 1, FUN = function(row) all(is.na(row)) ))
-
     # Iterate over the variable names except for LabNo. and VarietyorSelection,
     ## extract numeric values, and replace those values in the data.frame
     for (varname in var.names[!var.names %in% c("LabNo.", "VarietyorSelection")]) {
-      suppressWarnings(data.f3[[varname]] <- extract_numeric(data.f3[[varname]]))
+      suppressWarnings(data.f3[[varname]] <- parse_numeric(data.f3[[varname]]))
     }
 
 
     # Add a new column with the table number
     data.f3 <- mutate(data.f3, Batch = table.no)
-    # Remove the OverallRank column
-    data.f3 <- select(data.f3, -OverallRank)
 
 
     # Cut out the checks
-    check.slice <- data.f3$VarietyorSelection %>% grep(pattern = "MALT CHECK")
+    check.slice <- data.f3$VarietyorSelection %>%
+      str_detect(pattern = "MALT CHECK") %>%
+      which()
     check.f <- slice(data.f3, check.slice)
     # Cut out the stats
     stats.slice <- grep(pattern = "^[^0-9]{1,}", x = data.f3$LabNo.)
@@ -115,17 +117,17 @@ extract.maltq <- function(files, tidy = FALSE) {
 
   # Rearrange if requested
   if (tidy) {
-    maltq.data.gather <- select(maltq.data, -LabNo.) %>%
-      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch)
-    maltq.stats.gather <- select(maltq.stats, -LabNo.) %>%
-      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch)
-    maltq.checks.gather <- select(maltq.checks, -LabNo.) %>%
-      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch)
+    maltq.data.gather <- maltq.data %>%
+      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch, -LabNo.)
+    maltq.stats.gather <- maltq.data %>%
+      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch, -LabNo.)
+    maltq.checks.gather <- maltq.data %>%
+      gather(key = "Parameter", value = "Value", -VarietyorSelection, -Batch, -LabNo.)
 
     # Output list
-    return(list(data = maltq.data.gather,
-                stats = maltq.stats.gather,
-                checks = maltq.checks.gather))
+    return(list(data = as.data.frame(maltq.data.gather),
+                stats = as.data.frame(maltq.stats.gather),
+                checks = as.data.frame(maltq.checks.gather)))
 
   } else { # Otherwise just output a list
 
