@@ -28,4 +28,3 @@ Barley Breeding Group. This data often comes from the USDA Cereal Laboratory
 in Madison, Wisconsin. Data from this lab is usually formatted consistently,
 permitting use of a common function.
 }
-

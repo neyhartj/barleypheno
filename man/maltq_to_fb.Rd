@@ -29,4 +29,3 @@ Takes a data.frame of malt quality data and converts it
 to a Field Book table format. This allows for easy database upload and for
 spatial adjustment
 }
-
